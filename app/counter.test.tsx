@@ -8,5 +8,6 @@ it("App Router: Works with Client Components (React State)", () => {
   render(<Counter />);
   expect(screen.getByRole("heading")).toHaveTextContent("0");
   fireEvent.click(screen.getByRole("button"));
-  expect(screen.getByRole("heading")).toHaveTextContent("1");
+  //Delibrately failing test cases
+  expect(screen.getByRole("heading")).toHaveTextContent("111");
 });
