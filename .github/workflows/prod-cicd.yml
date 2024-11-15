@@ -3,7 +3,7 @@ name: Production CI/CD Pipeline
 on:
   push:
     branches:
-      - main
+      - stagging
   pull_request:
     branches:
       - staging
