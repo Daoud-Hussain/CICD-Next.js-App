@@ -62,11 +62,11 @@ jobs:
         run: echo "${{ secrets.DOCKER_PASSWORD_DEV }}" | docker login -u "${{ secrets.DOCKER_USERNAME_DEV }}" --password-stdin
       - name: Push Docker image to Docker Hub (dev)
         run: docker push ${{ env.IMAGE_NAME }}:dev
-      # - name: Deploy to Dev Server
-      #   run: |
-      #     ssh -o StrictHostKeyChecking=no ${{ secrets.DEV_SERVER_USER }}@${{ secrets.DEV_SERVER_IP }} << 'EOF'
-      #     docker pull ${{ env.IMAGE_NAME }}:dev
-      #     docker stop dev-container || true
-      #     docker rm dev-container || true
-      #     docker run -d --name dev-container -p 3000:3000 ${{ env.IMAGE_NAME }}:dev
-      #     EOF
+      - name: Deploy to Dev Server
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEV_SERVER_USER }}@${{ secrets.DEV_SERVER_IP }} << 'EOF'
+          docker pull ${{ env.IMAGE_NAME }}:dev
+          docker stop dev-container || true
+          docker rm dev-container || true
+          docker run -d --name dev-container -p 3000:3000 ${{ env.IMAGE_NAME }}:dev
+          EOF
