@@ -1,0 +1,72 @@
+name: Staging CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - staging
+  pull_request:
+    branches:
+      - dev
+
+env:
+  IMAGE_NAME: daoudhussaindev/next-js-app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build Next.js application
+        run: npm run build
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm run test
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.ref == 'refs/heads/staging'
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image for staging
+        run: docker build -t ${{ env.IMAGE_NAME }}:staging .
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD_DEV }}" | docker login -u "${{ secrets.DOCKER_USERNAME_DEV }}" --password-stdin
+      - name: Push Docker image to Docker Hub (staging)
+        run: docker push ${{ env.IMAGE_NAME }}:staging
+      # - name: Deploy to Staging Server
+      #   run: |
+      #     ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_SERVER_USER }}@${{ secrets.STAGING_SERVER_IP }} << 'EOF'
+      #     docker pull ${{ env.IMAGE_NAME }}:staging
+      #     docker stop staging-container || true
+      #     docker rm staging-container || true
+      #     docker run -d --name staging-container -p 3001:3000 ${{ env.IMAGE_NAME }}:staging
+      #     EOF
