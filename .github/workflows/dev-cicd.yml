@@ -70,33 +70,47 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Create SSH directory
-        run: mkdir -p ~/.ssh
-
-      - name: Store SSH key
+      - name: Set up SSH
         run: |
+          mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          
+          # Debug: Check key format (safely)
+          echo "Checking key format..."
+          head -n 1 ~/.ssh/deploy_key
+          
+          # Set proper permissions
           chmod 600 ~/.ssh/deploy_key
-
-      - name: Add EC2 host to known_hosts
-        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          
+          # Add host key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          
+          # Debug: Test SSH connection
+          echo "Testing SSH connection..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes -vvv ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'echo "SSH connection successful"'
 
       - name: Deploy to EC2
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST '
-            # Stop and remove existing container if it exists
-            docker ps -q --filter "name=next-js-app" | grep -q . && docker stop next-js-app && docker rm next-js-app
+          echo "Starting deployment..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
+            set -e
+            echo 'Connected to EC2 instance'
             
-            # Pull the latest image
+            echo 'Checking Docker status...'
+            docker ps
+            
+            echo 'Stopping existing container...'
+            docker ps -q --filter 'name=next-js-app' | grep -q . && docker stop next-js-app && docker rm next-js-app || true
+            
+            echo 'Pulling new image...'
             docker pull ${{ env.IMAGE_NAME }}:latest
             
-            # Run the new container
+            echo 'Starting new container...'
             docker run -d \
               --name next-js-app \
               -p 3000:3000 \
               --restart unless-stopped \
               ${{ env.IMAGE_NAME }}:latest
-          '
+            
+            echo 'Deployment completed successfully'
+          "
