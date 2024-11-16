@@ -1,5 +1,4 @@
 name: Dev CI/CD Pipeline
-
 on:
   push:
     branches:
@@ -7,10 +6,10 @@ on:
   pull_request:
     branches:
       - dev
-
 env:
   IMAGE_NAME: daoudhussaindev/next-js-app
   NODE_VERSION: 18.x
+  AWS_REGION: ap-south-1
 
 jobs:
   build:
@@ -18,19 +17,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
-
       - name: Build Next.js application
         run: npm run build
-
       - name: Cache build output
         uses: actions/cache@v3
         with:
@@ -47,13 +42,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-
       - name: Restore cache
         uses: actions/cache@v3
         with:
@@ -61,66 +54,65 @@ jobs:
             .next
             node_modules
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
-
       - name: Install dependencies
         run: npm ci
-
       - name: Run tests
         run: npm run test
 
   deploy:
     needs: [build, test]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
+      - name: Set up Docker
         uses: docker/setup-buildx-action@v1
-
+  
       - name: Login to Docker Hub
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKER_USERNAME_DEV }}
           password: ${{ secrets.DOCKER_PASSWORD_DEV }}
-
+  
       - name: Build and push Docker image
         uses: docker/build-push-action@v2
         with:
           context: .
           push: true
-          tags: ${{ env.IMAGE_NAME }}:dev
-          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:dev
-          cache-to: type=inline
+          tags: ${{ secrets.DOCKER_USERNAME_DEV }}/next-js-app:dev
+    
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Install SSH key
-        uses: shimataro/ssh-key-action@v2
+        uses: webfactory/ssh-agent@v0.7.0
         with:
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
-          if_key_exists: replace
+          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
 
-      - name: Deploy to server
-        env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
+      - name: Add EC2 host to known_hosts
         run: |
-          ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << 'EOF'
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          # Connect to EC2 and pull/run the latest image
+          ssh $EC2_USER@$EC2_HOST '
+            # Stop and remove existing container if it exists
+            docker ps -q --filter "name=next-js-app" | grep -q . && docker stop next-js-app && docker rm next-js-app
+            
             # Pull the latest image
-            docker pull ${{ env.IMAGE_NAME }}:dev
+            docker pull ${{ env.IMAGE_NAME }}:latest
             
-            # Stop and remove existing container
-            docker stop dev-container || true
-            docker rm dev-container || true
-            
-            # Run new container
+            # Run the new container
             docker run -d \
-              --name dev-container \
-              --restart unless-stopped \
+              --name next-js-app \
               -p 3000:3000 \
-              ${{ env.IMAGE_NAME }}:dev
-            
-            # Clean up old images
-            docker image prune -f
-          EOF
+              --restart unless-stopped \
+              ${{ env.IMAGE_NAME }}:latest
+          '
