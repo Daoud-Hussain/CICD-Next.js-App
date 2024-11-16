@@ -1,5 +1,5 @@
-name: Staging CI/CD Pipeline
 
+name: Stagging CI/CD Pipeline
 on:
   push:
     branches:
@@ -7,66 +7,101 @@ on:
   pull_request:
     branches:
       - dev
-
 env:
   IMAGE_NAME: daoudhussaindev/next-js-app
+  NODE_VERSION: 18.x
+  AWS_REGION: ap-south-1
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [18.x]
-
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Node.js ${{ matrix.node-version }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
       - name: Build Next.js application
         run: npm run build
+      - name: Cache build output
+        uses: actions/cache@v3
+        with:
+          path: |
+            .next
+            node_modules
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
 
   test:
-    runs-on: ubuntu-latest
     needs: build
-    strategy:
-      matrix:
-        node-version: [18.x]
-
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Node.js ${{ matrix.node-version }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            .next
+            node_modules
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
       - name: Install dependencies
         run: npm ci
       - name: Run tests
         run: npm run test
 
   deploy:
+    needs: [build, test]
     runs-on: ubuntu-latest
-    needs: [test]
-    if: github.ref == 'refs/heads/staging'
-
     steps:
-      - uses: actions/checkout@v4
-      - name: Build Docker image for staging
-        run: docker build -t ${{ env.IMAGE_NAME }}:staging .
-      - name: Login to Docker Hub
-        run: echo "${{ secrets.DOCKER_PASSWORD_DEV }}" | docker login -u "${{ secrets.DOCKER_USERNAME_DEV }}" --password-stdin
-      - name: Push Docker image to Docker Hub (staging)
-        run: docker push ${{ env.IMAGE_NAME }}:staging
-      # - name: Deploy to Staging Server
-      #   run: |
-      #     ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_SERVER_USER }}@${{ secrets.STAGING_SERVER_IP }} << 'EOF'
-      #     docker pull ${{ env.IMAGE_NAME }}:staging
-      #     docker stop staging-container || true
-      #     docker rm staging-container || true
-      #     docker run -d --name staging-container -p 3001:3000 ${{ env.IMAGE_NAME }}:staging
-      #     EOF
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          echo "Testing SSH connection..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'echo "SSH connection successful"'
+
+      - name: Deploy to EC2
+        run: |
+          echo "Starting deployment..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
+            set -e
+            echo 'Connected to EC2 instance'
+            
+            echo 'Checking Docker status...'
+            docker ps
+            
+            echo 'Stopping existing container...'
+            docker ps -q --filter 'name=next-js-app' | grep -q . && docker stop next-js-app && docker rm next-js-app || true
+            
+            echo 'Pulling new image...'
+            docker pull ${{ env.IMAGE_NAME }}:dev
+            
+            echo 'Starting new container...'
+            docker run -d \
+              --name next-js-app-stagging \
+              -p 3000:3000 \
+              --restart unless-stopped \
+              ${{ env.IMAGE_NAME }}:dev
+            
+            echo 'Deployment completed successfully'
+          "
