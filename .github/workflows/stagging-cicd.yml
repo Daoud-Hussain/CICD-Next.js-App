@@ -98,7 +98,7 @@ jobs:
             
             echo 'Starting new container...'
             docker run -d \
-              --name next-js-app \
+              --name next-js-app-stagging \
               -p 3000:3000 \
               --restart unless-stopped \
               ${{ env.IMAGE_NAME }}:dev
