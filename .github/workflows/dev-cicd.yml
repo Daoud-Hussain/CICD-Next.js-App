@@ -10,6 +10,7 @@ env:
   IMAGE_NAME: daoudhussaindev/next-js-app
   NODE_VERSION: 18.x
   AWS_REGION: ap-south-1
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -69,23 +70,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install SSH key
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+      - name: Create SSH directory
+        run: mkdir -p ~/.ssh
+
+      - name: Store SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
 
       - name: Add EC2 host to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          # Connect to EC2 and pull/run the latest image
-          ssh $EC2_USER@$EC2_HOST '
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST '
             # Stop and remove existing container if it exists
             docker ps -q --filter "name=next-js-app" | grep -q . && docker stop next-js-app && docker rm next-js-app
             
