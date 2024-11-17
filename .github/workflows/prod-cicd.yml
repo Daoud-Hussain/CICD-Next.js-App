@@ -109,7 +109,7 @@ jobs:
 
       - name: Log in to DockerHub
         run: |
-          echo $DOCKER_PASSWORD_DEV | docker login --username $DOCKER_USERNAME_DEV --password-stdin
+          echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin
 
       - name: Build Docker image
         run: |
