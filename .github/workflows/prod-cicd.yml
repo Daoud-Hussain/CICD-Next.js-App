@@ -1,16 +1,17 @@
-
-name: Stagging CI/CD Pipeline
+name: Production CI/CD Pipeline
 on:
   push:
     branches:
-      - stagging
+      - main
   pull_request:
     branches:
-      - dev
+      - main
 env:
   IMAGE_NAME: daoudhussaindev/next-js-app
   NODE_VERSION: 18.x
   AWS_REGION: ap-south-1
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME_DEV }}
+  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD_DEV }}
 
 jobs:
   build:
@@ -105,3 +106,15 @@ jobs:
             
             echo 'Deployment completed successfully'
           "
+
+      - name: Log in to DockerHub
+        run: |
+          echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}:latest .
+
+      - name: Push Docker image to Docker Hub
+        run: |
+          docker push ${{ env.IMAGE_NAME }}:latest
