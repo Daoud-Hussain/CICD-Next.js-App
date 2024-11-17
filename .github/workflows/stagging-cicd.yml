@@ -1,8 +1,8 @@
 name: Stagging CI/CD Pipeline
 on:
-  push:
-    branches:
-      - stagging
+  # push:
+  #   branches:
+  #     - stagging
   pull_request:
     branches:
       - stagging
