@@ -1,11 +1,11 @@
 name: Production CI/CD Pipeline
 on:
-  push:
-    branches:
-      - main
+  # push:
+  #   branches:
+  #     - main
   pull_request:
     branches:
-      - stagging
+      - main
 env:
   IMAGE_NAME: daoudhussaindev/next-js-app
   NODE_VERSION: 18.x
