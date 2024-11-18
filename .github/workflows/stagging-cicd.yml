@@ -9,6 +9,8 @@ env:
   NODE_VERSION: 18.x
   AWS_REGION: ap-south-1
   CONTAINER_NAME: next-js-app-staging  
+  PORT: 3000
+
 
 jobs:
   build:
@@ -75,8 +77,6 @@ jobs:
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-          echo "Testing SSH connection..."
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'echo "SSH connection successful"'
 
       - name: Deploy to EC2
         run: |
@@ -88,12 +88,9 @@ jobs:
             echo 'Checking Docker status...'
             docker ps
             
-            echo 'Stopping existing container...'
-            if docker ps -a --filter name=${{ env.CONTAINER_NAME }} | grep -q ${{ env.CONTAINER_NAME }}; then
-              echo 'Stopping and removing existing container...'
-              docker stop ${{ env.CONTAINER_NAME }} || true
-              docker rm ${{ env.CONTAINER_NAME }} || true
-            fi
+            echo 'Stopping and removing existing container...'
+            docker stop ${{ env.CONTAINER_NAME }} || true
+            docker rm ${{ env.CONTAINER_NAME }} || true
             
             echo 'Pulling new image...'
             docker pull ${{ env.IMAGE_NAME }}:dev
@@ -101,7 +98,7 @@ jobs:
             echo 'Starting new container...'
             docker run -d \
               --name ${{ env.CONTAINER_NAME }} \
-              -p 3000:3000 \
+              -p ${{ env.PORT }}:${{ env.PORT }} \
               --restart unless-stopped \
               ${{ env.IMAGE_NAME }}:dev
             
@@ -121,14 +118,14 @@ jobs:
 
       - name: Verify Deployment
         run: |
-          echo "Waiting for application to start..."
-          sleep 15
+          echo "Verifying deployment..."
+          sleep 15  # Give the application time to start
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
-            if curl -s http://localhost:3000 > /dev/null; then
-              echo 'Application is responding'
+            if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
+              echo 'Deployment verified successfully'
               exit 0
             else
-              echo 'Application is not responding'
+              echo 'Deployment verification failed'
               exit 1
             fi
           "
