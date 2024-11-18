@@ -1,4 +1,5 @@
 name: Production CI/CD Pipeline
+
 on:
   push:
     branches:
@@ -20,15 +21,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        
       - name: Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          
       - name: Install dependencies
         run: npm ci
+        
       - name: Build Next.js application
         run: npm run build
+        
       - name: Cache build output
         uses: actions/cache@v3
         with:
@@ -45,11 +50,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        
       - name: Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          
       - name: Restore cache
         uses: actions/cache@v3
         with:
@@ -57,8 +64,10 @@ jobs:
             .next
             node_modules
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          
       - name: Install dependencies
         run: npm ci
+        
       - name: Run tests
         run: npm run test
 
@@ -66,8 +75,30 @@ jobs:
     needs: [build, test]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Debug directory
+        run: |
+          pwd
+          ls -la
+          echo "Checking for Dockerfile:"
+          cat Dockerfile || echo "Dockerfile not found!"
+
+      - name: Log in to DockerHub
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD_DEV }}" | docker login --username "${{ secrets.DOCKER_USERNAME_DEV }}" --password-stdin
+        
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}:latest .
+          
+      - name: Push Docker image to Docker Hub
+        run: |
+          docker push ${{ env.IMAGE_NAME }}:latest
+          
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -79,7 +110,9 @@ jobs:
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-          echo "Testing SSH connection..."
+
+      - name: Test SSH connection
+        run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'echo "SSH connection successful"'
 
       - name: Deploy to EC2
@@ -89,33 +122,43 @@ jobs:
             set -e
             echo 'Connected to EC2 instance'
             
+            # Login to Docker Hub on EC2
+            echo '${{ secrets.DOCKER_PASSWORD_DEV }}' | docker login --username '${{ secrets.DOCKER_USERNAME_DEV }}' --password-stdin
+            
             echo 'Checking Docker status...'
             docker ps
             
             echo 'Stopping existing container...'
-            docker ps -q --filter 'name=next-js-app' | grep -q . && docker stop next-js-app && docker rm next-js-app || true
+            docker ps -q --filter 'name=next-js-app-prod' | grep -q . && docker stop next-js-app-prod && docker rm next-js-app-prod || true
             
             echo 'Pulling new image...'
-            docker pull ${{ env.IMAGE_NAME }}:dev
+            docker pull ${{ env.IMAGE_NAME }}:latest
             
             echo 'Starting new container...'
             docker run -d \
               --name next-js-app-prod \
               -p 8000:8000 \
               --restart unless-stopped \
-              ${{ env.IMAGE_NAME }}:dev
+              ${{ env.IMAGE_NAME }}:latest
+            
+            echo 'Cleaning up old images...'
+            docker image prune -f
             
             echo 'Deployment completed successfully'
           "
 
-      - name: Log in to DockerHub
+      - name: Verify Deployment
         run: |
-          echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin
-
-      - name: Build Docker image
-        run: |
-          docker build -t ${{ env.IMAGE_NAME }}:latest .
-
-      - name: Push Docker image to Docker Hub
-        run: |
-          docker push ${{ env.IMAGE_NAME }}:latest
+          echo "Waiting for application to start..."
+          sleep 30  # Give the application time to start
+          
+          # Test if the application is responding
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
+            if docker ps | grep -q next-js-app-prod; then
+              echo 'Container is running'
+              exit 0
+            else
+              echo 'Container is not running'
+              exit 1
+            fi
+          "
