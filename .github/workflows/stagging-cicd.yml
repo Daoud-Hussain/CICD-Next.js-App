@@ -1,16 +1,14 @@
-name: Stagging CI/CD Pipeline
+name: Staging CI/CD Pipeline
 on:
   push:
     branches:
-      - stagging
-  # pull_request:
-  #   branches:
-  #     - stagging
+      - staging
   
 env:
   IMAGE_NAME: daoudhussaindev/next-js-app
   NODE_VERSION: 18.x
   AWS_REGION: ap-south-1
+  CONTAINER_NAME: next-js-app-staging  
 
 jobs:
   build:
@@ -91,17 +89,46 @@ jobs:
             docker ps
             
             echo 'Stopping existing container...'
-            docker ps -q --filter 'name=next-js-app' | grep -q . && docker stop next-js-app && docker rm next-js-app || true
+            if docker ps -a --filter name=${{ env.CONTAINER_NAME }} | grep -q ${{ env.CONTAINER_NAME }}; then
+              echo 'Stopping and removing existing container...'
+              docker stop ${{ env.CONTAINER_NAME }} || true
+              docker rm ${{ env.CONTAINER_NAME }} || true
+            fi
             
             echo 'Pulling new image...'
             docker pull ${{ env.IMAGE_NAME }}:dev
             
             echo 'Starting new container...'
             docker run -d \
-              --name next-js-app-stagging \
+              --name ${{ env.CONTAINER_NAME }} \
               -p 3000:3000 \
               --restart unless-stopped \
               ${{ env.IMAGE_NAME }}:dev
             
+            echo 'Cleaning up old images...'
+            docker image prune -f
+            
+            echo 'Verifying deployment...'
+            if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
+              echo 'Container is running successfully'
+            else
+              echo 'Container failed to start'
+              exit 1
+            fi
+            
             echo 'Deployment completed successfully'
+          "
+
+      - name: Verify Deployment
+        run: |
+          echo "Waiting for application to start..."
+          sleep 15
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
+            if curl -s http://localhost:3000 > /dev/null; then
+              echo 'Application is responding'
+              exit 0
+            else
+              echo 'Application is not responding'
+              exit 1
+            fi
           "
