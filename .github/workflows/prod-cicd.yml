@@ -138,6 +138,7 @@ jobs:
             docker run -d \
               --name next-js-app-prod \
               -p 8000:8000 \
+              -e PORT=8000 \
               --restart unless-stopped \
               ${{ env.IMAGE_NAME }}:latest
             
