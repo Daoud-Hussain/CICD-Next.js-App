@@ -117,8 +117,9 @@ jobs:
             docker run -d \
               --name next-js-app-staging \
               -p 3000:3000 \
+              -e PORT=3000 \
               --restart unless-stopped \
-              daoudhussaindev/next-js-app:dev
+              ${{ env.IMAGE_NAME }}:dev
 
             echo 'Cleaning up old images...'
             docker image prune -f
