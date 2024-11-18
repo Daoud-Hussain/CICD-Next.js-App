@@ -1,11 +1,12 @@
 name: Stagging CI/CD Pipeline
 on:
-  # push:
-  #   branches:
-  #     - stagging
-  pull_request:
+  push:
     branches:
       - stagging
+  # pull_request:
+  #   branches:
+  #     - stagging
+  
 env:
   IMAGE_NAME: daoudhussaindev/next-js-app
   NODE_VERSION: 18.x
