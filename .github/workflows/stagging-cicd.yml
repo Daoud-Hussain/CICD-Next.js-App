@@ -2,7 +2,7 @@ name: Staging CI/CD Pipeline
 on:
   push:
     branches:
-      - staging
+      - stagging
   
 env:
   IMAGE_NAME: daoudhussaindev/next-js-app
