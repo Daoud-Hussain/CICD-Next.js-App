@@ -1,16 +1,16 @@
 name: Staging CI/CD Pipeline
+
 on:
   push:
     branches:
       - stagging
-  
+
 env:
   IMAGE_NAME: daoudhussaindev/next-js-app
   NODE_VERSION: 18.x
   AWS_REGION: ap-south-1
-  CONTAINER_NAME: next-js-app-staging  
+  CONTAINER_NAME: next-js-app-staging
   PORT: 3000
-
 
 jobs:
   build:
@@ -18,15 +18,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+
       - name: Install dependencies
         run: npm ci
+
       - name: Build Next.js application
         run: npm run build
+
       - name: Cache build output
         uses: actions/cache@v3
         with:
@@ -43,11 +47,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+
       - name: Restore cache
         uses: actions/cache@v3
         with:
@@ -55,8 +61,10 @@ jobs:
             .next
             node_modules
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+
       - name: Install dependencies
         run: npm ci
+
       - name: Run tests
         run: npm run test
 
@@ -78,59 +86,58 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-          - name: Deploy to EC2
-          run: |
-            echo "Starting deployment..."
-            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
-              set -e
-              echo 'Connected to EC2 instance'
-              
-              echo 'Checking Docker status...'
-              docker ps -a
-        
-              echo 'Ensuring no containers are bound to port ${{ env.PORT }}...'
-              CONFLICTING_CONTAINER=\$(docker ps -q --filter publish=${{ env.PORT }})
-              if [ -n \"\$CONFLICTING_CONTAINER\" ]; then
-                echo 'Stopping conflicting container...'
-                docker stop \$CONFLICTING_CONTAINER
-                echo 'Removing conflicting container...'
-                docker rm \$CONFLICTING_CONTAINER
-              fi
-        
-              echo 'Stopping and removing existing container named ${{ env.CONTAINER_NAME }} (if exists)...'
-              docker stop ${{ env.CONTAINER_NAME }} || true
-              docker rm ${{ env.CONTAINER_NAME }} || true
-        
-              echo 'Pulling new image...'
-              docker pull ${{ env.IMAGE_NAME }}:dev
-              
-              echo 'Starting new container...'
-              docker run -d \
-                --name ${{ env.CONTAINER_NAME }} \
-                -p ${{ env.PORT }}:${{ env.PORT }} \
-                --restart unless-stopped \
-                ${{ env.IMAGE_NAME }}:dev
-              
-              echo 'Cleaning up old images...'
-              docker image prune -f
-        
-              echo 'Verifying deployment...'
-              if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
-                echo 'Container is running successfully'
-              else
-                echo 'Container failed to start'
-                exit 1
-              fi
-        
-              echo 'Deployment completed successfully'
-            "
-        
+      - name: Deploy to EC2
+        run: |
+          echo "Starting deployment..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+            set -e
+            echo 'Connected to EC2 instance'
+
+            echo 'Checking Docker status...'
+            docker ps -a
+
+            echo 'Ensuring no containers are bound to port 3000...'
+            CONFLICTING_CONTAINER=\$(docker ps -q --filter publish=3000)
+            if [ -n "\$CONFLICTING_CONTAINER" ]; then
+              echo 'Stopping conflicting container...'
+              docker stop \$CONFLICTING_CONTAINER
+              echo 'Removing conflicting container...'
+              docker rm \$CONFLICTING_CONTAINER
+            fi
+
+            echo 'Stopping and removing existing container named next-js-app-staging (if exists)...'
+            docker stop next-js-app-staging || true
+            docker rm next-js-app-staging || true
+
+            echo 'Pulling new image...'
+            docker pull daoudhussaindev/next-js-app:dev
+
+            echo 'Starting new container...'
+            docker run -d \
+              --name next-js-app-staging \
+              -p 3000:3000 \
+              --restart unless-stopped \
+              daoudhussaindev/next-js-app:dev
+
+            echo 'Cleaning up old images...'
+            docker image prune -f
+
+            echo 'Verifying deployment...'
+            if docker ps | grep -q next-js-app-staging; then
+              echo 'Container is running successfully'
+            else
+              echo 'Container failed to start'
+              exit 1
+            fi
+
+            echo 'Deployment completed successfully'
+          EOF
 
       - name: Verify Deployment
         run: |
           echo "Verifying deployment..."
           sleep 15  # Give the application time to start
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
             if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
               echo 'Deployment verified successfully'
               exit 0
@@ -138,4 +145,4 @@ jobs:
               echo 'Deployment verification failed'
               exit 1
             fi
-          "
+          EOF
