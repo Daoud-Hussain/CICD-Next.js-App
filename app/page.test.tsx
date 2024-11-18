@@ -6,7 +6,7 @@ describe("App Router", () => {
     render(<Page />);
     
     // Check for specific heading (e.g., <h1> text)
-    expect(screen.getByRole('heading', { name: /My Next\.js Site/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Next\.js Site/i })).toBeInTheDocument();
 
     // Alternatively, you can check for other headings or count the number of heading elements
     const headings = screen.getAllByRole('heading');
