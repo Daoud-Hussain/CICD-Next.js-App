@@ -78,43 +78,53 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to EC2
-        run: |
-          echo "Starting deployment..."
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
-            set -e
-            echo 'Connected to EC2 instance'
-            
-            echo 'Checking Docker status...'
-            docker ps
-            
-            echo 'Stopping and removing existing container...'
-            docker stop ${{ env.CONTAINER_NAME }} || true
-            docker rm ${{ env.CONTAINER_NAME }} || true
-            
-            echo 'Pulling new image...'
-            docker pull ${{ env.IMAGE_NAME }}:dev
-            
-            echo 'Starting new container...'
-            docker run -d \
-              --name ${{ env.CONTAINER_NAME }} \
-              -p ${{ env.PORT }}:${{ env.PORT }} \
-              --restart unless-stopped \
-              ${{ env.IMAGE_NAME }}:dev
-            
-            echo 'Cleaning up old images...'
-            docker image prune -f
-            
-            echo 'Verifying deployment...'
-            if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
-              echo 'Container is running successfully'
-            else
-              echo 'Container failed to start'
-              exit 1
-            fi
-            
-            echo 'Deployment completed successfully'
-          "
+          - name: Deploy to EC2
+          run: |
+            echo "Starting deployment..."
+            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "\
+              set -e
+              echo 'Connected to EC2 instance'
+              
+              echo 'Checking Docker status...'
+              docker ps -a
+        
+              echo 'Ensuring no containers are bound to port ${{ env.PORT }}...'
+              CONFLICTING_CONTAINER=\$(docker ps -q --filter publish=${{ env.PORT }})
+              if [ -n \"\$CONFLICTING_CONTAINER\" ]; then
+                echo 'Stopping conflicting container...'
+                docker stop \$CONFLICTING_CONTAINER
+                echo 'Removing conflicting container...'
+                docker rm \$CONFLICTING_CONTAINER
+              fi
+        
+              echo 'Stopping and removing existing container named ${{ env.CONTAINER_NAME }} (if exists)...'
+              docker stop ${{ env.CONTAINER_NAME }} || true
+              docker rm ${{ env.CONTAINER_NAME }} || true
+        
+              echo 'Pulling new image...'
+              docker pull ${{ env.IMAGE_NAME }}:dev
+              
+              echo 'Starting new container...'
+              docker run -d \
+                --name ${{ env.CONTAINER_NAME }} \
+                -p ${{ env.PORT }}:${{ env.PORT }} \
+                --restart unless-stopped \
+                ${{ env.IMAGE_NAME }}:dev
+              
+              echo 'Cleaning up old images...'
+              docker image prune -f
+        
+              echo 'Verifying deployment...'
+              if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
+                echo 'Container is running successfully'
+              else
+                echo 'Container failed to start'
+                exit 1
+              fi
+        
+              echo 'Deployment completed successfully'
+            "
+        
 
       - name: Verify Deployment
         run: |
