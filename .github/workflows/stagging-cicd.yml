@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1completed
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -140,7 +140,7 @@ jobs:
           echo "Verifying deployment..."
           sleep 15  # Give the application time to start
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
-            if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
+            if docker ps | grep -q next-js-app-staging; then
               echo 'Deployment verified successfully'
               exit 0
             else
