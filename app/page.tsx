@@ -20,7 +20,7 @@ export default function Page() {
 
       <main className="w-full max-w-7xl flex flex-col items-center p-6">
         <section className="text-center py-12">
-          <h2 className="text-4xl font-bold text-gray-800 mb-4">Welcome to Our Site</h2>
+          <h2 className="text-4xl font-bold text-gray-800 mb-4">Welcome to Our Website</h2>
           <p className="text-lg text-gray-600">Discover beautiful images and engaging content below.</p>
         </section>
 
