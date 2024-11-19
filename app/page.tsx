@@ -9,7 +9,7 @@ export default function Page() {
     <div className="bg-gray-50 div-container min-h-screen flex flex-col items-center">
       <header className="w-full max-w-7xl flex justify-center items-center p-5 bg-white shadow-md">
         <div className="flex justify-between w-full max-w-4xl">
-          <h1 className="text-3xl font-bold text-blue-600">Next.js Site</h1>
+          <h1 className="text-3xl font-bold text-blue-600">Next.js App</h1>
           <nav className="space-x-4">
             <a href="#" className="text-gray-600 hover:text-blue-600">Home</a>
             <a href="#" className="text-gray-600 hover:text-blue-600">About</a>
