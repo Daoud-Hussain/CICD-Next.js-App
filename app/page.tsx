@@ -12,7 +12,7 @@ export default function Page() {
           <h1 className="text-3xl font-bold text-blue-600">Next.js Site</h1>
           <nav className="space-x-4">
             <a href="#" className="text-gray-600 hover:text-blue-600">Home</a>
-            <a href="#" className="text-gray-600 hover:text-blue-600">About</a>
+            <a href="#" className="text-gray-600 hover:text-blue-600">About Us</a>
             <a href="#" className="text-gray-600 hover:text-blue-600">Contact</a>
           </nav>
         </div>
